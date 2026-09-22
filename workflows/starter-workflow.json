@@ -1,0 +1,85 @@
+{
+  "name": "Starter Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "starter-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "676aab96-6e15-48a5-9299-b5e40da5170d",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "f13d432b-ff59-47ab-8bb4-6f39cf919e8b"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ce2f9f9f-36dd-4d29-90da-8f70f4bb2e30",
+              "name": "message",
+              "value": "Hello from your n8n starter workflow!",
+              "type": "string"
+            },
+            {
+              "id": "7254aac8-b834-4790-9854-844ccd7640d9",
+              "name": "receivedAt",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8f2e3c1a-1234-4a2b-9c3d-1a2b3c4d5e6f",
+      "name": "Set Response Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "9a1b2c3d-4e5f-4678-8a9b-0c1d2e3f4a5b",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [690, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set Response Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Response Data": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

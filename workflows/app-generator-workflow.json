@@ -1,0 +1,138 @@
+{
+  "name": "AI App Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-app",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "174d1e6f-66be-4d56-a3ba-49db19b047af",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "8a859e02-2786-492a-9152-ea550319e8db"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetType = body.target === 'frontend'\n  ? 'frontend (React, single-page app, no build step required to inspect the code)'\n  : 'backend (Node.js + Express REST API)';\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n- Include every file needed to run the project (source code, package.json, a README with run instructions).\n- Keep the project minimal but functional — favor completeness over cleverness.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir\n  }\n}];"
+      },
+      "id": "8fb6d88c-00b8-4136-b7ee-dea9cc598bb8",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-5\", max_tokens: 8000, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }] }) }}",
+        "options": {}
+      },
+      "id": "55ab20eb-38ec-49de-858e-46928609b646",
+      "name": "Call Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst text = (response.content && response.content[0] && response.content[0].text) || '';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  throw new Error('Claude did not return valid JSON. Raw response (truncated): ' + text.slice(0, 500));\n}\n\nif (!parsed.files || !Array.isArray(parsed.files)) {\n  throw new Error('Expected a \"files\" array in the generated JSON but did not find one.');\n}\n\nconst outputDir = $('Prepare Prompt').first().json.outputDir;\n\nreturn parsed.files.map(f => ({\n  json: {\n    path: f.path,\n    content: f.content,\n    outputDir\n  }\n}));"
+      },
+      "id": "f4110892-01c6-47cf-84dc-c4b0b33c33c2",
+      "name": "Parse Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "content",
+        "options": {
+          "fileName": "={{ $json.path.split('/').pop() }}"
+        }
+      },
+      "id": "2c5d5f68-899c-4be7-9fc1-4bde8d6dcebc",
+      "name": "To Text File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [1100, 220]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/generated/{{ $json.outputDir }}/{{ $json.path }}",
+        "options": {}
+      },
+      "id": "1cbf0780-e558-4e75-87a2-42def3b9b798",
+      "name": "Write to Disk",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1320, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst files = items.map(i => i.json.path);\n\nreturn [{\n  json: {\n    status: 'ok',\n    outputDir: items[0] ? items[0].json.outputDir : null,\n    filesWritten: files.length,\n    files\n  }\n}];"
+      },
+      "id": "6d2e7a4b-3f19-4c8e-9a2d-7b5c1e0f8a3d",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "3b6c8d1e-5a2f-4e9b-8c7d-1f4a6b9e2c5d",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1760, 220]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Prepare Prompt", "type": "main", "index": 0 }]]
+    },
+    "Prepare Prompt": {
+      "main": [[{ "node": "Call Claude", "type": "main", "index": 0 }]]
+    },
+    "Call Claude": {
+      "main": [[{ "node": "Parse Files", "type": "main", "index": 0 }]]
+    },
+    "Parse Files": {
+      "main": [[{ "node": "To Text File", "type": "main", "index": 0 }]]
+    },
+    "To Text File": {
+      "main": [[{ "node": "Write to Disk", "type": "main", "index": 0 }]]
+    },
+    "Write to Disk": {
+      "main": [[{ "node": "Summarize", "type": "main", "index": 0 }]]
+    },
+    "Summarize": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

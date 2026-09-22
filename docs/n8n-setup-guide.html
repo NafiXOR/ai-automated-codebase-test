@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>n8n Workflow Setup Guide</title>
+<style>
+  :root {
+    --bg: #f7f7f9;
+    --surface: #ffffff;
+    --text: #1a1a1f;
+    --text-muted: #5a5a68;
+    --border: #e3e3e9;
+    --accent: #ea4b71;
+    --accent-soft: #fdeef1;
+    --code-bg: #1e1e2a;
+    --code-text: #e8e8f0;
+    --success: #1f9d55;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14141a;
+      --surface: #1c1c24;
+      --text: #eeeef2;
+      --text-muted: #a0a0ad;
+      --border: #2c2c38;
+      --accent: #ff6d8f;
+      --accent-soft: #2a1820;
+      --code-bg: #0f0f16;
+      --code-text: #e8e8f0;
+      --success: #4ad07f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  a { color: var(--accent); }
+  .layout {
+    display: flex;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  nav.toc {
+    width: 240px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 32px 16px;
+    border-right: 1px solid var(--border);
+  }
+  nav.toc h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 12px 8px;
+  }
+  nav.toc ul { list-style: none; margin: 0; padding: 0; }
+  nav.toc a {
+    display: block;
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  nav.toc a:hover { background: var(--accent-soft); color: var(--accent); }
+  nav.toc a.done::before { content: "✓ "; color: var(--success); }
+  main {
+    flex: 1;
+    min-width: 0;
+    padding: 40px 48px 96px;
+  }
+  header.hero {
+    margin-bottom: 40px;
+  }
+  header.hero h1 {
+    font-size: 32px;
+    margin: 0 0 8px;
+  }
+  header.hero p {
+    color: var(--text-muted);
+    font-size: 16px;
+    max-width: 640px;
+  }
+  .badge-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .badge {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  section.step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    margin-bottom: 20px;
+  }
+  section.step h2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 19px;
+    margin: 0 0 12px;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  label.check {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-weight: 400;
+    user-select: none;
+  }
+  label.check input { width: 16px; height: 16px; accent-color: var(--success); }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    position: relative;
+    margin: 12px 0;
+  }
+  pre code { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .code-wrap { position: relative; }
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(255,255,255,0.1);
+    color: var(--code-text);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px;
+    font-size: 11px;
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.2); }
+  code.inline {
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--text-muted); font-weight: 600; }
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    margin: 12px 0;
+  }
+  .warn { border-left-color: #d97706; }
+  ul.tight, ol.tight { margin: 8px 0; padding-left: 22px; }
+  ul.tight li, ol.tight li { margin-bottom: 4px; }
+  footer {
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 24px;
+  }
+  @media (max-width: 860px) {
+    nav.toc { display: none; }
+    main { padding: 24px 18px 64px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" id="toc">
+    <h2>Steps</h2>
+    <ul id="toc-list">
+      <li><a href="#prereqs" data-step="prereqs">Prerequisites</a></li>
+      <li><a href="#step-1" data-step="step-1">1. Configure env vars</a></li>
+      <li><a href="#step-2" data-step="step-2">2. Start n8n</a></li>
+      <li><a href="#step-3" data-step="step-3">3. Log in</a></li>
+      <li><a href="#step-4" data-step="step-4">4. Import workflow</a></li>
+      <li><a href="#step-5" data-step="step-5">5. Test it</a></li>
+      <li><a href="#step-6" data-step="step-6">6. Build your own</a></li>
+      <li><a href="#ops" data-step="ops">Day-to-day ops</a></li>
+      <li><a href="#troubleshooting" data-step="troubleshooting">Troubleshooting</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <h1>n8n Automated Workflow Setup</h1>
+      <p>Follow these steps to run n8n locally with Docker and import the starter workflow
+      included in this repo. Check off each step as you go — progress is saved in this browser.</p>
+      <div class="badge-row">
+        <span class="badge">Docker Compose</span>
+        <span class="badge">Self-hosted</span>
+        <span class="badge">~10 min</span>
+      </div>
+    </header>
+
+    <section class="step" id="prereqs">
+      <h2><span class="step-num">•</span> Prerequisites
+        <label class="check"><input type="checkbox" data-step="prereqs"> done</label>
+      </h2>
+      <ul class="tight">
+        <li><a href="https://docs.docker.com/get-docker/" target="_blank" rel="noopener">Docker</a> and Docker Compose (bundled with Docker Desktop)</li>
+        <li><code class="inline">curl</code> or any HTTP client, to test the webhook later (optional)</li>
+      </ul>
+      <div class="code-wrap">
+        <pre><code>docker --version
+docker compose version</code></pre>
+        <button class="copy-btn" data-copy="docker --version&#10;docker compose version">Copy</button>
+      </div>
+    </section>
+
+    <section class="step" id="step-1">
+      <h2><span class="step-num">1</span> Configure environment variables
+        <label class="check"><input type="checkbox" data-step="step-1"> done</label>
+      </h2>
+      <p>Copy the example env file:</p>
+      <div class="code-wrap">
+        <pre><code>cp .env.example .env</code></pre>
+        <button class="copy-btn" data-copy="cp .env.example .env">Copy</button>
+      </div>
+      <p>Open <code class="inline">.env</code> and set a real login for the n8n UI:</p>
+      <div class="code-wrap">
+        <pre><code>N8N_BASIC_AUTH_USER=admin
+N8N_BASIC_AUTH_PASSWORD=choose-a-strong-password</code></pre>
+        <button class="copy-btn" data-copy="N8N_BASIC_AUTH_USER=admin&#10;N8N_BASIC_AUTH_PASSWORD=choose-a-strong-password">Copy</button>
+      </div>
+      <div class="note"><code class="inline">.env</code> is git-ignored — your credentials are never committed.</div>
+    </section>
+
+    <section class="step" id="step-2">
+      <h2><span class="step-num">2</span> Start n8n
+        <label class="check"><input type="checkbox" data-step="step-2"> done</label>
+      </h2>
+      <p>From the repo root:</p>
+      <div class="code-wrap">
+        <pre><code>docker compose up -d</code></pre>
+        <button class="copy-btn" data-copy="docker compose up -d">Copy</button>
+      </div>
+      <p>Check that the container is healthy:</p>
+      <div class="code-wrap">
+        <pre><code>docker compose ps
+docker compose logs -f n8n</code></pre>
+        <button class="copy-btn" data-copy="docker compose ps&#10;docker compose logs -f n8n">Copy</button>
+      </div>
+    </section>
+
+    <section class="step" id="step-3">
+      <h2><span class="step-num">3</span> Log in to the n8n editor
+        <label class="check"><input type="checkbox" data-step="step-3"> done</label>
+      </h2>
+      <p>Open <a href="http://localhost:5678" target="_blank" rel="noopener">http://localhost:5678</a>
+      and log in with the <code class="inline">N8N_BASIC_AUTH_USER</code> /
+      <code class="inline">N8N_BASIC_AUTH_PASSWORD</code> you set in <code class="inline">.env</code>.</p>
+    </section>
+
+    <section class="step" id="step-4">
+      <h2><span class="step-num">4</span> Import the starter workflow
+        <label class="check"><input type="checkbox" data-step="step-4"> done</label>
+      </h2>
+      <ol class="tight">
+        <li>In the n8n editor, click <strong>Workflows</strong> in the left sidebar, then <strong>Add workflow</strong>.</li>
+        <li>Click the <strong>⋯</strong> menu (top right) → <strong>Import from File</strong>.</li>
+        <li>Select <code class="inline">workflows/starter-workflow.json</code> from this repo.</li>
+        <li>Click <strong>Save</strong>, then toggle <strong>Active</strong> (top right).</li>
+      </ol>
+      <table>
+        <thead><tr><th>Node</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>Webhook</td><td>Trigger — listens on <code class="inline">POST /webhook/starter-webhook</code></td></tr>
+          <tr><td>Set Response Data</td><td>Adds a <code class="inline">message</code> and <code class="inline">receivedAt</code> timestamp</td></tr>
+          <tr><td>Respond to Webhook</td><td>Returns the processed data as JSON</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="step" id="step-5">
+      <h2><span class="step-num">5</span> Test the workflow
+        <label class="check"><input type="checkbox" data-step="step-5"> done</label>
+      </h2>
+      <p>With the workflow active, trigger it:</p>
+      <div class="code-wrap">
+        <pre><code>curl -X POST http://localhost:5678/webhook/starter-webhook \
+  -H "Content-Type: application/json" \
+  -d '{"hello": "world"}'</code></pre>
+        <button class="copy-btn" data-copy="curl -X POST http://localhost:5678/webhook/starter-webhook -H &quot;Content-Type: application/json&quot; -d '{&quot;hello&quot;: &quot;world&quot;}'">Copy</button>
+      </div>
+      <p>You should get back JSON containing your original payload plus <code class="inline">message</code>
+      and <code class="inline">receivedAt</code>. If nothing responds, open the workflow and check
+      <strong>Executions</strong> for errors.</p>
+    </section>
+
+    <section class="step" id="step-6">
+      <h2><span class="step-num">6</span> Build your own automation
+        <label class="check"><input type="checkbox" data-step="step-6"> done</label>
+      </h2>
+      <p>Use the starter workflow as a template:</p>
+      <ul class="tight">
+        <li>Replace <strong>Webhook</strong> with whatever should kick off your automation (schedule, form, another app's trigger node…)</li>
+        <li>Replace <strong>Set Response Data</strong> with the real processing steps (HTTP Request, Code, If, database nodes…)</li>
+        <li>Replace <strong>Respond to Webhook</strong> with a notification step (Slack, Email, Discord…) if it doesn't need to return an HTTP response</li>
+      </ul>
+      <p>Export what you build back into this repo: <strong>⋯ menu → Download</strong>, save into <code class="inline">workflows/</code>.</p>
+    </section>
+
+    <section class="step" id="ops">
+      <h2><span class="step-num">•</span> Day-to-day operations</h2>
+      <table>
+        <tbody>
+          <tr><td>Stop n8n</td><td><code class="inline">docker compose stop</code></td></tr>
+          <tr><td>Start it again</td><td><code class="inline">docker compose start</code></td></tr>
+          <tr><td>Stop &amp; remove container (data persists)</td><td><code class="inline">docker compose down</code></td></tr>
+          <tr><td>View logs</td><td><code class="inline">docker compose logs -f n8n</code></td></tr>
+          <tr><td>Update to latest image</td><td><code class="inline">docker compose pull &amp;&amp; docker compose up -d</code></td></tr>
+          <tr><td>Full reset ⚠️ deletes workflows/credentials</td><td><code class="inline">docker compose down -v</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="step" id="troubleshooting">
+      <h2><span class="step-num">•</span> Troubleshooting</h2>
+      <div class="note warn"><strong>Port 5678 already in use</strong> — stop whatever else is using it, or change the left-hand port in <code class="inline">ports:</code> in <code class="inline">docker-compose.yml</code> (e.g. <code class="inline">"5679:5678"</code>) and update <code class="inline">WEBHOOK_URL</code>.</div>
+      <div class="note warn"><strong>Can't log in</strong> — confirm <code class="inline">.env</code> exists and was edited before <code class="inline">docker compose up -d</code>. Run <code class="inline">docker compose up -d --force-recreate</code> after changing <code class="inline">.env</code>.</div>
+      <div class="note warn"><strong>Webhook returns 404</strong> — make sure the workflow is toggled <strong>Active</strong>, and use the production URL (<code class="inline">/webhook/...</code>), not the test URL (<code class="inline">/webhook-test/...</code>) shown while editing.</div>
+      <div class="note warn"><strong>Losing data after restart</strong> — <code class="inline">docker compose down -v</code> deletes the <code class="inline">n8n_data</code> volume; plain <code class="inline">docker compose down</code> does not.</div>
+    </section>
+
+    <footer>Part of the <code class="inline">automated-codebase</code> repo · see also <a href="n8n-setup-guide.md">n8n-setup-guide.md</a></footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  var STORAGE_KEY = 'n8n-setup-guide-progress';
+  function loadState() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveState(state) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
+  function applyState() {
+    var state = loadState();
+    document.querySelectorAll('input[type="checkbox"][data-step]').forEach(function (box) {
+      var done = !!state[box.dataset.step];
+      box.checked = done;
+      var link = document.querySelector('a[data-step="' + box.dataset.step + '"]');
+      if (link) link.classList.toggle('done', done);
+    });
+  }
+  document.querySelectorAll('input[type="checkbox"][data-step]').forEach(function (box) {
+    box.addEventListener('change', function () {
+      var state = loadState();
+      state[box.dataset.step] = box.checked;
+      saveState(state);
+      var link = document.querySelector('a[data-step="' + box.dataset.step + '"]');
+      if (link) link.classList.toggle('done', box.checked);
+    });
+  });
+  document.querySelectorAll('.copy-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = (btn.dataset.copy || '').replace(/&#10;/g, '\n').replace(/&quot;/g, '"');
+      var done = function () {
+        var original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(function () { btn.textContent = original; }, 1200);
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () {});
+        }
+      } catch (e) {}
+    });
+  });
+  applyState();
+})();
+</script>
+</body>
+</html>

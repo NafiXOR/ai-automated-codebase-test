@@ -1,0 +1,7 @@
+.env
+n8n_data/
+.DS_Store
+
+# AI-generated app output (scaffolds land here, not meant to be committed by default)
+generated/*
+!generated/.gitkeep
