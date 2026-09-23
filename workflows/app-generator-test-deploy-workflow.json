@@ -1,0 +1,456 @@
+{
+  "name": "AI App Generator (Test + Deploy)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-app-deployed",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b625baac-1b84-4467-bf05-029c8636de15",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        140,
+        400
+      ],
+      "webhookId": "254b0ce5-3a0e-4568-82a5-5b67a8f2f417"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nif (input.isRetry) {\n  const userPrompt = `The project you generated previously failed its tests. Here is what you generated:\n\n${input.filesJsonRaw}\n\nHere is the test/install output (stdout+stderr, truncated):\n\n${input.output}\n\nFix the code so \\`npm install && npm test\\` succeeds. Return the COMPLETE corrected file set using the same JSON schema as before (the full \"files\" array, not a diff) - strictly JSON, no markdown fences, no commentary.`;\n\n  return [{\n    json: {\n      systemPrompt: input.systemPrompt,\n      userPrompt,\n      outputDir: input.outputDir,\n      retryCount: input.retryCount,\n      maxRetries: input.maxRetries,\n      originalPrompt: input.originalPrompt,\n      hostPort: input.hostPort\n    }\n  }];\n}\n\nconst body = input.body || input;\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetType = body.target === 'frontend'\n  ? 'frontend (React, single-page app)'\n  : 'backend (Node.js + Express REST API)';\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\nconst maxRetries = Number.isInteger(body.maxRetries) ? body.maxRetries : 3;\nconst hostPort = Number.isInteger(body.hostPort) ? body.hostPort : 4000;\nif (hostPort < 1024 || hostPort > 65535) {\n  throw new Error('hostPort must be between 1024 and 65535.');\n}\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n- MUST include a package.json with a \"test\" script that runs deterministically with no network access beyond npm install, and exits non-zero with a clear error message on failure, 0 on success.\n- For a backend project, package.json MUST also include a \"start\" script that boots the server, and the server MUST listen on process.env.PORT (falling back to 3000 if unset) - this is required for automated deployment.\n- For a frontend project, the \"test\" script may just be a build/typecheck step (e.g. \"tsc --noEmit\") if full component tests aren't practical without a browser.\n- Include every file needed to install, run, and test the project.\n- Keep the project minimal but functional.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir,\n    retryCount: 0,\n    maxRetries,\n    hostPort\n  }\n}];"
+      },
+      "id": "19430faf-68b4-4de4-8ee5-1e4f088afac3",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-5\", max_tokens: 8000, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }] }) }}",
+        "options": {}
+      },
+      "id": "ca8d5ee3-4516-40f5-965f-12b27f4085be",
+      "name": "Call Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst text = (response.content && response.content[0] && response.content[0].text) || '';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  throw new Error('Claude did not return valid JSON. Raw response (truncated): ' + text.slice(0, 500));\n}\n\nif (!parsed.files || !Array.isArray(parsed.files)) {\n  throw new Error('Expected a \"files\" array in the generated JSON but did not find one.');\n}\n\nconst prior = $('Prepare Prompt').itemMatching(0).json;\nconst outputDir = prior.outputDir;\nconst baseDir = '/home/node/generated/' + outputDir;\n\nconst safePathRe = /^[A-Za-z0-9_][A-Za-z0-9_.\\-\\/]*$/;\nconst lines = ['set -e'];\nconst fileList = [];\n\nfor (const f of parsed.files) {\n  if (!f.path || !safePathRe.test(f.path) || f.path.indexOf('..') !== -1) {\n    throw new Error('Unsafe or invalid file path from generated output: ' + JSON.stringify(f.path));\n  }\n  const fullPath = baseDir + '/' + f.path;\n  const b64 = Buffer.from(String(f.content == null ? '' : f.content), 'utf8').toString('base64');\n  lines.push('mkdir -p \"$(dirname \"' + fullPath + '\")\"');\n  lines.push(\"printf '%s' '\" + b64 + \"' | base64 -d > \\\"\" + fullPath + \"\\\"\");\n  fileList.push(f.path);\n}\n\nlines.push('cd \"' + baseDir + '\"');\nlines.push('npm install --no-audit --no-fund');\nlines.push('npm test');\n\nreturn [{\n  json: {\n    command: lines.join('\\n'),\n    outputDir,\n    retryCount: prior.retryCount,\n    maxRetries: prior.maxRetries,\n    originalPrompt: prior.originalPrompt,\n    systemPrompt: prior.systemPrompt,\n    hostPort: prior.hostPort,\n    fileList,\n    filesJsonRaw: text\n  }\n}];"
+      },
+      "id": "e24f5ab0-22d1-477d-8ce8-13313ad2ce41",
+      "name": "Build Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.command }}"
+      },
+      "id": "e61216d2-acab-4a2d-9990-33c54fe8979e",
+      "name": "Run Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const testResult = $input.first().json;\nconst prior = $('Build Script').itemMatching(0).json;\n\nconst exitCode = typeof testResult.exitCode === 'number' ? testResult.exitCode : 1;\nconst passed = exitCode === 0;\nconst output = ((testResult.stdout || '') + '\\n' + (testResult.stderr || '')).slice(-4000);\n\nreturn [{\n  json: {\n    passed,\n    exitCode,\n    output,\n    outputDir: prior.outputDir,\n    retryCount: prior.retryCount,\n    maxRetries: prior.maxRetries,\n    originalPrompt: prior.originalPrompt,\n    systemPrompt: prior.systemPrompt,\n    hostPort: prior.hostPort,\n    fileList: prior.fileList,\n    filesJsonRaw: prior.filesJsonRaw\n  }\n}];"
+      },
+      "id": "e80267c4-d741-417f-819f-94fdc7acfee6",
+      "name": "Evaluate Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-passed",
+              "leftValue": "={{ $json.passed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "996720ae-ec64-4db8-8ac8-0d7c2c1c705b",
+      "name": "Tests Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nreturn [{\n  json: {\n    outputDir: d.outputDir,\n    retriesUsed: d.retryCount,\n    filesWritten: (d.fileList || []).length,\n    files: d.fileList || [],\n    testOutput: d.output,\n    hostPort: d.hostPort\n  }\n}];"
+      },
+      "id": "e67c982c-851e-4a69-b477-bf357fa88acf",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\n\nconst outputDir = d.outputDir;\nconst safeName = outputDir.toLowerCase().replace(/[^a-z0-9-]/g, '-');\nconst appDir = '/home/node/generated/' + outputDir;\nconst imageTag = 'generated-' + safeName + ':latest';\nconst containerName = 'generated-' + safeName;\nconst hostPort = d.hostPort;\nconst containerPort = 3000;\n\nconst dockerfile = [\n  'FROM node:20-alpine',\n  'WORKDIR /app',\n  'COPY . .',\n  'RUN npm install --omit=dev --no-audit --no-fund',\n  'ENV PORT=' + containerPort,\n  'EXPOSE ' + containerPort,\n  'CMD [\"npm\", \"start\"]'\n].join('\\n');\n\nconst lines = [\n  'set -e',\n  'cat > \"' + appDir + '/Dockerfile\" << \\'DOCKERFILE_EOF\\'',\n  dockerfile,\n  'DOCKERFILE_EOF',\n  'docker rm -f \"' + containerName + '\" >/dev/null 2>&1 || true',\n  'docker build -t \"' + imageTag + '\" \"' + appDir + '\"',\n  'docker run -d --name \"' + containerName + '\" -p ' + hostPort + ':' + containerPort + ' --restart unless-stopped \"' + imageTag + '\"'\n];\n\nreturn [{\n  json: {\n    command: lines.join('\\n'),\n    outputDir,\n    imageTag,\n    containerName,\n    hostPort,\n    containerPort,\n    retriesUsed: d.retriesUsed,\n    filesWritten: d.filesWritten,\n    files: d.files,\n    testOutput: d.testOutput\n  }\n}];"
+      },
+      "id": "9dc1d291-9d66-480b-a57a-3c5a8b4bb752",
+      "name": "Build Deploy Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2060,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.command }}"
+      },
+      "id": "4d475ad8-5ed6-41da-a144-58da52b9ed41",
+      "name": "Run Deploy",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        180
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst prior = $('Build Deploy Script').itemMatching(0).json;\n\nconst exitCode = typeof result.exitCode === 'number' ? result.exitCode : 1;\nconst deployOutput = ((result.stdout || '') + '\\n' + (result.stderr || '')).slice(-4000);\n\nif (exitCode !== 0) {\n  return [{\n    json: {\n      status: 'tests_passed_deploy_failed',\n      outputDir: prior.outputDir,\n      retriesUsed: prior.retriesUsed,\n      filesWritten: prior.filesWritten,\n      files: prior.files,\n      testOutput: prior.testOutput,\n      deployOutput\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    status: 'deployed',\n    outputDir: prior.outputDir,\n    retriesUsed: prior.retriesUsed,\n    filesWritten: prior.filesWritten,\n    files: prior.files,\n    testOutput: prior.testOutput,\n    containerName: prior.containerName,\n    image: prior.imageTag,\n    url: 'http://localhost:' + prior.hostPort,\n    deployOutput\n  }\n}];"
+      },
+      "id": "19c54748-e785-4bfd-be73-e897c49bad3d",
+      "name": "Evaluate Deploy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "2e8b7d1a-a560-4a19-8a95-0198b47bbb56",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2780,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-retries",
+              "leftValue": "={{ $json.retryCount }}",
+              "rightValue": "={{ $json.maxRetries }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "198aee21-8f7a-4c1f-8a3c-f85e402f6d8a",
+      "name": "Retries Left?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prior = $input.first().json;\nreturn [{\n  json: {\n    isRetry: true,\n    retryCount: prior.retryCount + 1,\n    maxRetries: prior.maxRetries,\n    outputDir: prior.outputDir,\n    originalPrompt: prior.originalPrompt,\n    systemPrompt: prior.systemPrompt,\n    filesJsonRaw: prior.filesJsonRaw,\n    output: prior.output,\n    hostPort: prior.hostPort\n  }\n}];"
+      },
+      "id": "bd306e95-942b-4af1-a558-ab265ee544e4",
+      "name": "Prepare Fix Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nreturn [{\n  json: {\n    status: 'failed',\n    reason: 'Max retries exceeded - tests still failing. Nothing was deployed.',\n    outputDir: d.outputDir,\n    retriesUsed: d.retryCount,\n    lastTestOutput: d.output\n  }\n}];"
+      },
+      "id": "4658996a-3ccd-44b5-a7d4-d412555460c2",
+      "name": "Give Up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2060,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "195ec991-c1d7-47a0-b1e1-6ec02bc33e9e",
+      "name": "Respond Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2300,
+        720
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Fix Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Claude": {
+      "main": [
+        [
+          {
+            "node": "Build Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Script": {
+      "main": [
+        [
+          {
+            "node": "Run Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Script": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Result": {
+      "main": [
+        [
+          {
+            "node": "Tests Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tests Passed?": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retries Left?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Build Deploy Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Deploy Script": {
+      "main": [
+        [
+          {
+            "node": "Run Deploy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Deploy": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Deploy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Deploy": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retries Left?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Fix Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Give Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Give Up": {
+      "main": [
+        [
+          {
+            "node": "Respond Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

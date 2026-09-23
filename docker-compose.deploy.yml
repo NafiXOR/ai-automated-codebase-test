@@ -1,0 +1,19 @@
+# Opt-in override that enables app-generator-test-deploy-workflow.json's real Docker deploy step.
+#
+# NOT merged into docker-compose.yml on purpose: it mounts the HOST's Docker socket into the n8n
+# container, which gives n8n (and anything it executes, including AI-generated npm
+# install/npm test output) root-equivalent control over the host. Only enable this on a
+# disposable/sandboxed machine — see docs/app-generator-test-deploy-workflow.md for the full
+# writeup of that tradeoff.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d --build
+
+services:
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: automated-codebase-n8n:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

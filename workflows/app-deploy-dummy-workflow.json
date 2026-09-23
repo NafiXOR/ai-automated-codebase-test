@@ -1,0 +1,78 @@
+{
+  "name": "App Deploy (Dummy)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deploy-app",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ff92d403-d978-4ba9-aace-218a8d68cda3",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ],
+      "webhookId": "976e1acd-853d-4a06-9c1b-e5af5d3b57b4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = input.body || input;\n\nconst outputDir = body.outputDir;\nif (!outputDir || !/^[A-Za-z0-9_-]+$/.test(outputDir)) {\n  throw new Error('outputDir must be a non-empty string of letters, numbers, \"-\", \"_\" only (the folder name under generated/ to \"deploy\").');\n}\n\nconst hostPort = Number.isInteger(body.hostPort) ? body.hostPort : 4000;\nconst safeName = outputDir.toLowerCase().replace(/[^a-z0-9-]/g, '-');\n\nreturn [{\n  json: {\n    status: 'ok',\n    note: 'DUMMY DEPLOYMENT - this is a placeholder. No Docker image was built, no container was started, and nothing is actually reachable at the URL below.',\n    outputDir,\n    containerName: 'generated-' + safeName,\n    simulatedUrl: 'http://localhost:' + hostPort,\n    deployedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "0fdc4a1f-3bd9-4650-95db-d4e7763753bf",
+      "name": "Fake Deploy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "1a2b3c4d-5e6f-4789-8a9b-0c1d2e3f4a5b",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fake Deploy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fake Deploy": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

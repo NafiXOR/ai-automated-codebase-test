@@ -12,18 +12,24 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [220, 300],
+      "position": [
+        220,
+        300
+      ],
       "webhookId": "8a859e02-2786-492a-9152-ea550319e8db"
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetType = body.target === 'frontend'\n  ? 'frontend (React, single-page app, no build step required to inspect the code)'\n  : 'backend (Node.js + Express REST API)';\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n- Include every file needed to run the project (source code, package.json, a README with run instructions).\n- Keep the project minimal but functional — favor completeness over cleverness.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir\n  }\n}];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetType = body.target === 'frontend'\n  ? 'frontend (React, single-page app, no build step required to inspect the code)'\n  : 'backend (Node.js + Express REST API)';\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n- Include every file needed to run the project (source code, package.json, a README with run instructions).\n- For a backend project, package.json MUST include a \"start\" script that boots the server, and the server MUST listen on process.env.PORT (falling back to 3000 if unset) \u2014 this is required for automated deployment.\n- Keep the project minimal but functional \u2014 favor completeness over cleverness.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir\n  }\n}];"
       },
       "id": "8fb6d88c-00b8-4136-b7ee-dea9cc598bb8",
       "name": "Prepare Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -34,8 +40,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -47,7 +59,10 @@
       "name": "Call Claude",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -57,7 +72,10 @@
       "name": "Parse Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
     },
     {
       "parameters": {
@@ -71,7 +89,10 @@
       "name": "To Text File",
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     },
     {
       "parameters": {
@@ -83,7 +104,10 @@
       "name": "Write to Disk",
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
-      "position": [1320, 220]
+      "position": [
+        1320,
+        220
+      ]
     },
     {
       "parameters": {
@@ -93,7 +117,10 @@
       "name": "Summarize",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1540, 220]
+      "position": [
+        1540,
+        220
+      ]
     },
     {
       "parameters": {
@@ -105,30 +132,89 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1760, 220]
+      "position": [
+        1760,
+        220
+      ]
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{ "node": "Prepare Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Prompt": {
-      "main": [[{ "node": "Call Claude", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Call Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Call Claude": {
-      "main": [[{ "node": "Parse Files", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Parse Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse Files": {
-      "main": [[{ "node": "To Text File", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "To Text File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "To Text File": {
-      "main": [[{ "node": "Write to Disk", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Write to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Write to Disk": {
-      "main": [[{ "node": "Summarize", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Summarize": {
-      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
