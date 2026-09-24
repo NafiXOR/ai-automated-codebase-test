@@ -25,20 +25,15 @@ docker compose version
 
 ## 1. Configure environment variables
 
-Copy the example env file and edit the credentials:
+Copy the example env file:
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and set a real login for the n8n UI:
-
-```
-N8N_BASIC_AUTH_USER=admin
-N8N_BASIC_AUTH_PASSWORD=choose-a-strong-password
-```
-
-`.env` is git-ignored, so your credentials never get committed.
+The defaults (host `localhost`, timezone `UTC`) work as-is; edit `.env` only to change them.
+`.env` is git-ignored. It has no login settings: n8n 1.0 and later ignore the old
+`N8N_BASIC_AUTH_*` variables, and you create an owner account in the browser instead (step 3).
 
 ## 2. Start n8n
 
@@ -57,10 +52,16 @@ docker compose logs -f n8n
 
 Press `Ctrl+C` to stop following logs (this does not stop the container).
 
-## 3. Log in to the n8n editor
+## 3. Create the owner account
 
-Open [http://localhost:5678](http://localhost:5678) in your browser and log in with the
-`N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD` you set in `.env`.
+Open [http://localhost:5678](http://localhost:5678) in your browser. On the first visit n8n
+asks you to create an **owner account** (email + password); later visits use that login. The
+account is stored in the `n8n_data` volume, so it survives restarts.
+
+n8n is bound to `127.0.0.1` in `docker-compose.yml`, so it is only reachable from this machine.
+That matters because the app generator webhooks run AI-written code and have no token by
+default; see [app-generator-workflow.md](app-generator-workflow.md#optional-protect-the-webhook-with-a-token)
+to add one.
 
 ## 4. Import the starter workflow
 
@@ -121,9 +122,12 @@ Export any workflow you build back into this repo for version control:
 - **Port 5678 already in use** — stop whatever else is using it, or change the left-hand port in
   the `ports:` mapping in `docker-compose.yml` (e.g. `"5679:5678"`) and update `WEBHOOK_URL`
   accordingly.
-- **Can't log in** — confirm `.env` was created (`cp .env.example .env`) and that
-  `docker compose up -d` was run *after* editing it. Restart with `docker compose up -d --force-recreate`
-  if you changed `.env` after the container was already running.
+- **Can't log in / forgot the owner password** — the owner account lives in the `n8n_data`
+  volume, not `.env`. Reset it with
+  `docker compose exec n8n n8n user-management:reset`, then reload the page to create a new owner.
+- **Can't reach n8n from another machine** — by design; the port is bound to `127.0.0.1`. Change
+  `"127.0.0.1:5678:5678"` to `"5678:5678"` in `docker-compose.yml` only if you really need
+  remote access, and put n8n behind TLS if you do.
 - **Webhook returns 404** — make sure the workflow is toggled **Active**, and that you're using
   the production URL (`/webhook/...`) rather than the test URL shown while editing
   (`/webhook-test/...`), which only works while the editor is open and "listening."

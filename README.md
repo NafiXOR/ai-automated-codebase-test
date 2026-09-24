@@ -5,11 +5,11 @@ Automated workflow setup powered by [n8n](https://n8n.io), self-hosted via Docke
 ## Quick start
 
 ```bash
-cp .env.example .env      # then edit N8N_BASIC_AUTH_USER / PASSWORD
+cp .env.example .env      # optional overrides (host, timezone)
 docker compose up -d      # start n8n
 ```
 
-Open [http://localhost:5678](http://localhost:5678), log in, and import
+Open [http://localhost:5678](http://localhost:5678), create the owner account on first visit, and import
 [`workflows/starter-workflow.json`](workflows/starter-workflow.json) (⋯ menu → Import from File).
 
 For the full walkthrough, see:
@@ -23,7 +23,7 @@ For the full walkthrough, see:
 |---|---|
 | [`starter-workflow.json`](workflows/starter-workflow.json) | Minimal example: Webhook → Set → Respond |
 | [`app-generator-workflow.json`](workflows/app-generator-workflow.json) | POST a plain-language app description, get a generated backend/frontend scaffold written to `generated/` — see [docs/app-generator-workflow.md](docs/app-generator-workflow.md) |
-| [`app-generator-with-tests-workflow.json`](workflows/app-generator-with-tests-workflow.json) | Same idea, but writes the code, runs `npm test` against it, and sends failures back to Claude to fix — retrying until tests pass or a retry limit is hit — see [docs/app-generator-self-testing-workflow.md](docs/app-generator-self-testing-workflow.md) |
+| [`app-generator-with-tests-workflow.json`](workflows/app-generator-with-tests-workflow.json) | Same idea, but writes the code, runs `npm test` against it, and sends failures back to Gemini to fix — retrying until tests pass or a retry limit is hit — see [docs/app-generator-self-testing-workflow.md](docs/app-generator-self-testing-workflow.md) |
 | [`app-deploy-dummy-workflow.json`](workflows/app-deploy-dummy-workflow.json) | Placeholder deploy step — validates a request and returns a fake success response, no real container is built or run yet — see [docs/app-deploy-dummy-workflow.md](docs/app-deploy-dummy-workflow.md) |
 | [`app-generator-test-deploy-workflow.json`](workflows/app-generator-test-deploy-workflow.json) | The real thing: generate → test-and-fix loop → **actually deploy** as a running Docker container on success. Needs the opt-in `docker-compose.deploy.yml` override (mounts the Docker socket — read the security note) — see [docs/app-generator-test-deploy-workflow.md](docs/app-generator-test-deploy-workflow.md) |
 
@@ -42,7 +42,7 @@ and give up (iteration, repo context, testing) compared to just asking Claude di
 ├── .env.example                     # template for local env vars (copy to .env)
 ├── workflows/
 │   ├── starter-workflow.json        # generic starter workflow (Webhook → Set → Respond)
-│   ├── app-generator-workflow.json  # AI app generator workflow (needs an Anthropic API key)
+│   ├── app-generator-workflow.json  # AI app generator workflow (needs a Gemini API key)
 │   ├── app-generator-with-tests-workflow.json  # app generator with a test-and-retry loop
 │   ├── app-deploy-dummy-workflow.json  # placeholder deploy step (no real container yet)
 │   └── app-generator-test-deploy-workflow.json  # generate + test-and-fix + real Docker deploy

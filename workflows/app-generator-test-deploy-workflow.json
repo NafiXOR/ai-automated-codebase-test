@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\n\nif (input.isRetry) {\n  const userPrompt = `The project you generated previously failed its tests. Here is what you generated:\n\n${input.filesJsonRaw}\n\nHere is the test/install output (stdout+stderr, truncated):\n\n${input.output}\n\nFix the code so \\`npm install && npm test\\` succeeds. Return the COMPLETE corrected file set using the same JSON schema as before (the full \"files\" array, not a diff) - strictly JSON, no markdown fences, no commentary.`;\n\n  return [{\n    json: {\n      systemPrompt: input.systemPrompt,\n      userPrompt,\n      outputDir: input.outputDir,\n      retryCount: input.retryCount,\n      maxRetries: input.maxRetries,\n      originalPrompt: input.originalPrompt,\n      hostPort: input.hostPort\n    }\n  }];\n}\n\nconst body = input.body || input;\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetType = body.target === 'frontend'\n  ? 'frontend (React, single-page app)'\n  : 'backend (Node.js + Express REST API)';\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\nconst maxRetries = Number.isInteger(body.maxRetries) ? body.maxRetries : 3;\nconst hostPort = Number.isInteger(body.hostPort) ? body.hostPort : 4000;\nif (hostPort < 1024 || hostPort > 65535) {\n  throw new Error('hostPort must be between 1024 and 65535.');\n}\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n- MUST include a package.json with a \"test\" script that runs deterministically with no network access beyond npm install, and exits non-zero with a clear error message on failure, 0 on success.\n- For a backend project, package.json MUST also include a \"start\" script that boots the server, and the server MUST listen on process.env.PORT (falling back to 3000 if unset) - this is required for automated deployment.\n- For a frontend project, the \"test\" script may just be a build/typecheck step (e.g. \"tsc --noEmit\") if full component tests aren't practical without a browser.\n- Include every file needed to install, run, and test the project.\n- Keep the project minimal but functional.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir,\n    retryCount: 0,\n    maxRetries,\n    hostPort\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\n\nif (input.isRetry) {\n  const userPrompt = `Your previous attempt at this request failed.\n\nOriginal request:\n\n${input.originalPrompt}\n\nWhat you returned last time:\n\n${input.filesJsonRaw}\n\nThe error, or the npm install / npm test output (stdout+stderr, truncated):\n\n${input.output}\n\nFix the problem so the response parses and \\`npm install && npm test\\` succeeds. Return the COMPLETE corrected file set using the same JSON schema as before (the full \"files\" array, not a diff) - strictly JSON, no markdown fences, no commentary.`;\n\n  return [{\n    json: {\n      systemPrompt: input.systemPrompt,\n      userPrompt,\n      outputDir: input.outputDir,\n      retryCount: input.retryCount,\n      maxRetries: input.maxRetries,\n      originalPrompt: input.originalPrompt,\n      hostPort: input.hostPort\n    }\n  }];\n}\n\nconst body = input.body || input;\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetType = body.target === 'frontend'\n  ? 'frontend (React, single-page app)'\n  : 'backend (Node.js + Express REST API)';\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\nconst maxRetries = Number.isInteger(body.maxRetries) ? body.maxRetries : 3;\nconst hostPort = Number.isInteger(body.hostPort) ? body.hostPort : 4000;\nif (hostPort < 1024 || hostPort > 65535) {\n  throw new Error('hostPort must be between 1024 and 65535.');\n}\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n- MUST include a package.json with a \"test\" script that runs deterministically with no network access beyond npm install, and exits non-zero with a clear error message on failure, 0 on success.\n- For a backend project, package.json MUST also include a \"start\" script that boots the server, and the server MUST listen on process.env.PORT (falling back to 3000 if unset) - this is required for automated deployment.\n- For a frontend project, the \"test\" script may just be a build/typecheck step (e.g. \"tsc --noEmit\") if full component tests aren't practical without a browser.\n- Include every file needed to install, run, and test the project.\n- Keep the project minimal but functional.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir,\n    retryCount: 0,\n    maxRetries,\n    originalPrompt: body.prompt,\n    hostPort\n  }\n}];"
       },
       "id": "19430faf-68b4-4de4-8ee5-1e4f088afac3",
       "name": "Prepare Prompt",
@@ -34,16 +34,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
-            },
             {
               "name": "content-type",
               "value": "application/json"
@@ -52,21 +48,30 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-5\", max_tokens: 8000, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"gemini-3.6-flash\", max_tokens: 16000, reasoning_effort: \"low\", messages: [{ role: \"system\", content: $json.systemPrompt }, { role: \"user\", content: $json.userPrompt }] }) }}",
         "options": {}
       },
       "id": "ca8d5ee3-4516-40f5-965f-12b27f4085be",
-      "name": "Call Claude",
+      "name": "Call Gemini",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         620,
         400
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "geminiApiHeader01",
+          "name": "Gemini API"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst text = (response.content && response.content[0] && response.content[0].text) || '';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  throw new Error('Claude did not return valid JSON. Raw response (truncated): ' + text.slice(0, 500));\n}\n\nif (!parsed.files || !Array.isArray(parsed.files)) {\n  throw new Error('Expected a \"files\" array in the generated JSON but did not find one.');\n}\n\nconst prior = $('Prepare Prompt').itemMatching(0).json;\nconst outputDir = prior.outputDir;\nconst baseDir = '/home/node/generated/' + outputDir;\n\nconst safePathRe = /^[A-Za-z0-9_][A-Za-z0-9_.\\-\\/]*$/;\nconst lines = ['set -e'];\nconst fileList = [];\n\nfor (const f of parsed.files) {\n  if (!f.path || !safePathRe.test(f.path) || f.path.indexOf('..') !== -1) {\n    throw new Error('Unsafe or invalid file path from generated output: ' + JSON.stringify(f.path));\n  }\n  const fullPath = baseDir + '/' + f.path;\n  const b64 = Buffer.from(String(f.content == null ? '' : f.content), 'utf8').toString('base64');\n  lines.push('mkdir -p \"$(dirname \"' + fullPath + '\")\"');\n  lines.push(\"printf '%s' '\" + b64 + \"' | base64 -d > \\\"\" + fullPath + \"\\\"\");\n  fileList.push(f.path);\n}\n\nlines.push('cd \"' + baseDir + '\"');\nlines.push('npm install --no-audit --no-fund');\nlines.push('npm test');\n\nreturn [{\n  json: {\n    command: lines.join('\\n'),\n    outputDir,\n    retryCount: prior.retryCount,\n    maxRetries: prior.maxRetries,\n    originalPrompt: prior.originalPrompt,\n    systemPrompt: prior.systemPrompt,\n    hostPort: prior.hostPort,\n    fileList,\n    filesJsonRaw: text\n  }\n}];"
+        "jsCode": "const response = $input.first().json;\n// OpenAI-style chat completion (Gemini's compatibility endpoint). Anthropic Messages\n// responses are still understood, so switching providers back only touches Call Gemini.\nconst choice = (response.choices || [])[0] || {};\nconst text = choice.message\n  ? String(choice.message.content || '')\n  : (response.content || []).filter(b => b.type === 'text').map(b => b.text).join('');\nconst truncated = choice.finish_reason === 'length' || response.stop_reason === 'max_tokens';\nconst jsonText = text.trim().replace(/^```(?:json)?\\s*/, '').replace(/\\s*```$/, '');\n\nconst b64 = s => Buffer.from(String(s), 'utf8').toString('base64');\nconst wrap = lines => [\n  'out=$( (',\n  'set -e',\n  ...lines,\n  ') 2>&1 )',\n  'code=$?',\n  \"printf '%s\\\\n' \\\"$out\\\"\",\n  'echo \"__EXIT_CODE__=$code\"'\n].join('\\n');\n\nconst safePathRe = /^[A-Za-z0-9_][A-Za-z0-9_.\\-\\/]*$/;\nconst isSafePath = p => typeof p === 'string' && safePathRe.test(p) && p.indexOf('..') === -1;\n\nconst prior = $('Prepare Prompt').itemMatching(0).json;\nconst outputDir = prior.outputDir;\nconst baseDir = '/home/node/generated/' + outputDir;\n\n// A bad response is fed back to the model through the normal fix loop instead of throwing.\nlet problem = null;\nlet parsed;\nif (truncated) {\n  problem = 'Your response was cut off at the max_tokens limit before the JSON was complete. Generate a smaller project (fewer files, shorter code) so the whole JSON fits.';\n} else {\n  try {\n    parsed = JSON.parse(jsonText);\n  } catch (e) {\n    problem = 'Your response was not valid JSON (' + e.message + '). Respond with the JSON object only - no markdown fences, no commentary.';\n  }\n  if (!problem && (!parsed || !Array.isArray(parsed.files))) {\n    problem = 'Your JSON did not contain a \"files\" array.';\n  }\n  if (!problem) {\n    const bad = parsed.files.find(f => !isSafePath(f.path));\n    if (bad) {\n      problem = 'Unsafe or invalid file path: ' + JSON.stringify(bad.path) + '. Paths must be relative, with no leading slash and no \"..\".';\n    }\n  }\n}\n\nconst lines = [];\nconst fileList = [];\n\nif (problem) {\n  lines.push(\"printf '%s\\\\n' '\" + b64(problem) + \"' | base64 -d\", 'exit 1');\n} else {\n  for (const f of parsed.files) {\n    const fullPath = baseDir + '/' + f.path;\n    lines.push('mkdir -p \"$(dirname \"' + fullPath + '\")\"');\n    lines.push(\"printf '%s' '\" + b64(f.content == null ? '' : f.content) + \"' | base64 -d > \\\"\" + fullPath + \"\\\"\");\n    fileList.push(f.path);\n  }\n  lines.push('cd \"' + baseDir + '\"');\n  lines.push('npm install --no-audit --no-fund');\n  lines.push('npm test');\n}\n\nreturn [{\n  json: {\n    command: wrap(lines),\n    outputDir,\n    retryCount: prior.retryCount,\n    maxRetries: prior.maxRetries,\n    originalPrompt: prior.originalPrompt,\n    systemPrompt: prior.systemPrompt,\n    hostPort: prior.hostPort,\n    fileList,\n    filesJsonRaw: text\n  }\n}];"
       },
       "id": "e24f5ab0-22d1-477d-8ce8-13313ad2ce41",
       "name": "Build Script",
@@ -93,7 +98,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const testResult = $input.first().json;\nconst prior = $('Build Script').itemMatching(0).json;\n\nconst exitCode = typeof testResult.exitCode === 'number' ? testResult.exitCode : 1;\nconst passed = exitCode === 0;\nconst output = ((testResult.stdout || '') + '\\n' + (testResult.stderr || '')).slice(-4000);\n\nreturn [{\n  json: {\n    passed,\n    exitCode,\n    output,\n    outputDir: prior.outputDir,\n    retryCount: prior.retryCount,\n    maxRetries: prior.maxRetries,\n    originalPrompt: prior.originalPrompt,\n    systemPrompt: prior.systemPrompt,\n    hostPort: prior.hostPort,\n    fileList: prior.fileList,\n    filesJsonRaw: prior.filesJsonRaw\n  }\n}];"
+        "jsCode": "const result = $input.first().json;\nconst prior = $('Build Script').itemMatching(0).json;\n\nconst raw = [result.stdout, result.stderr, result.error].filter(Boolean).map(String).join('\\n');\nconst marker = raw.match(/__EXIT_CODE__=(\\d+)/);\nconst exitCode = marker ? Number(marker[1]) : 1;\nconst output = raw.replace(/\\n?__EXIT_CODE__=\\d+/, '').slice(-4000);\nconst passed = exitCode === 0;\n\nreturn [{\n  json: {\n    passed,\n    exitCode,\n    output,\n    outputDir: prior.outputDir,\n    retryCount: prior.retryCount,\n    maxRetries: prior.maxRetries,\n    originalPrompt: prior.originalPrompt,\n    systemPrompt: prior.systemPrompt,\n    hostPort: prior.hostPort,\n    fileList: prior.fileList,\n    filesJsonRaw: prior.filesJsonRaw\n  }\n}];"
       },
       "id": "e80267c4-d741-417f-819f-94fdc7acfee6",
       "name": "Evaluate Result",
@@ -152,7 +157,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $input.first().json;\n\nconst outputDir = d.outputDir;\nconst safeName = outputDir.toLowerCase().replace(/[^a-z0-9-]/g, '-');\nconst appDir = '/home/node/generated/' + outputDir;\nconst imageTag = 'generated-' + safeName + ':latest';\nconst containerName = 'generated-' + safeName;\nconst hostPort = d.hostPort;\nconst containerPort = 3000;\n\nconst dockerfile = [\n  'FROM node:20-alpine',\n  'WORKDIR /app',\n  'COPY . .',\n  'RUN npm install --omit=dev --no-audit --no-fund',\n  'ENV PORT=' + containerPort,\n  'EXPOSE ' + containerPort,\n  'CMD [\"npm\", \"start\"]'\n].join('\\n');\n\nconst lines = [\n  'set -e',\n  'cat > \"' + appDir + '/Dockerfile\" << \\'DOCKERFILE_EOF\\'',\n  dockerfile,\n  'DOCKERFILE_EOF',\n  'docker rm -f \"' + containerName + '\" >/dev/null 2>&1 || true',\n  'docker build -t \"' + imageTag + '\" \"' + appDir + '\"',\n  'docker run -d --name \"' + containerName + '\" -p ' + hostPort + ':' + containerPort + ' --restart unless-stopped \"' + imageTag + '\"'\n];\n\nreturn [{\n  json: {\n    command: lines.join('\\n'),\n    outputDir,\n    imageTag,\n    containerName,\n    hostPort,\n    containerPort,\n    retriesUsed: d.retriesUsed,\n    filesWritten: d.filesWritten,\n    files: d.files,\n    testOutput: d.testOutput\n  }\n}];"
+        "jsCode": "const d = $input.first().json;\n\nconst b64 = s => Buffer.from(String(s), 'utf8').toString('base64');\nconst wrap = lines => [\n  'out=$( (',\n  'set -e',\n  ...lines,\n  ') 2>&1 )',\n  'code=$?',\n  \"printf '%s\\\\n' \\\"$out\\\"\",\n  'echo \"__EXIT_CODE__=$code\"'\n].join('\\n');\n\nconst outputDir = d.outputDir;\nconst safeName = outputDir.toLowerCase().replace(/[^a-z0-9-]/g, '-');\nconst appDir = '/home/node/generated/' + outputDir;\nconst imageTag = 'generated-' + safeName + ':latest';\nconst containerName = 'generated-' + safeName;\nconst hostPort = d.hostPort;\nconst containerPort = 3000;\n\nconst dockerfile = [\n  'FROM node:20-alpine',\n  'WORKDIR /app',\n  'COPY . .',\n  'RUN npm install --omit=dev --no-audit --no-fund',\n  'ENV PORT=' + containerPort,\n  'EXPOSE ' + containerPort,\n  'CMD [\"npm\", \"start\"]'\n].join('\\n') + '\\n';\n\n// Keeps the test run's node_modules (which include devDependencies) out of the image, so\n// the image's own `npm install --omit=dev` decides what ships.\nconst dockerignore = ['node_modules', 'npm-debug.log', 'Dockerfile', '.dockerignore'].join('\\n') + '\\n';\n\nconst lines = [\n  \"printf '%s' '\" + b64(dockerfile) + \"' | base64 -d > \\\"\" + appDir + \"/Dockerfile\\\"\",\n  \"printf '%s' '\" + b64(dockerignore) + \"' | base64 -d > \\\"\" + appDir + \"/.dockerignore\\\"\",\n  'docker rm -f \"' + containerName + '\" >/dev/null 2>&1 || true',\n  'docker build -t \"' + imageTag + '\" \"' + appDir + '\"',\n  'docker run -d --name \"' + containerName + '\" -p ' + hostPort + ':' + containerPort + ' --restart unless-stopped \"' + imageTag + '\"'\n];\n\nreturn [{\n  json: {\n    command: wrap(lines),\n    outputDir,\n    imageTag,\n    containerName,\n    hostPort,\n    containerPort,\n    retriesUsed: d.retriesUsed,\n    filesWritten: d.filesWritten,\n    files: d.files,\n    testOutput: d.testOutput\n  }\n}];"
       },
       "id": "9dc1d291-9d66-480b-a57a-3c5a8b4bb752",
       "name": "Build Deploy Script",
@@ -179,7 +184,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const result = $input.first().json;\nconst prior = $('Build Deploy Script').itemMatching(0).json;\n\nconst exitCode = typeof result.exitCode === 'number' ? result.exitCode : 1;\nconst deployOutput = ((result.stdout || '') + '\\n' + (result.stderr || '')).slice(-4000);\n\nif (exitCode !== 0) {\n  return [{\n    json: {\n      status: 'tests_passed_deploy_failed',\n      outputDir: prior.outputDir,\n      retriesUsed: prior.retriesUsed,\n      filesWritten: prior.filesWritten,\n      files: prior.files,\n      testOutput: prior.testOutput,\n      deployOutput\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    status: 'deployed',\n    outputDir: prior.outputDir,\n    retriesUsed: prior.retriesUsed,\n    filesWritten: prior.filesWritten,\n    files: prior.files,\n    testOutput: prior.testOutput,\n    containerName: prior.containerName,\n    image: prior.imageTag,\n    url: 'http://localhost:' + prior.hostPort,\n    deployOutput\n  }\n}];"
+        "jsCode": "const result = $input.first().json;\nconst prior = $('Build Deploy Script').itemMatching(0).json;\n\nconst raw = [result.stdout, result.stderr, result.error].filter(Boolean).map(String).join('\\n');\nconst marker = raw.match(/__EXIT_CODE__=(\\d+)/);\nconst exitCode = marker ? Number(marker[1]) : 1;\nconst output = raw.replace(/\\n?__EXIT_CODE__=\\d+/, '').slice(-4000);\nconst deployOutput = output;\n\nif (exitCode !== 0) {\n  return [{\n    json: {\n      status: 'tests_passed_deploy_failed',\n      outputDir: prior.outputDir,\n      retriesUsed: prior.retriesUsed,\n      filesWritten: prior.filesWritten,\n      files: prior.files,\n      testOutput: prior.testOutput,\n      deployOutput\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    status: 'deployed',\n    outputDir: prior.outputDir,\n    retriesUsed: prior.retriesUsed,\n    filesWritten: prior.filesWritten,\n    files: prior.files,\n    testOutput: prior.testOutput,\n    containerName: prior.containerName,\n    image: prior.imageTag,\n    url: 'http://localhost:' + prior.hostPort,\n    deployOutput\n  }\n}];"
       },
       "id": "19c54748-e785-4bfd-be73-e897c49bad3d",
       "name": "Evaluate Deploy",
@@ -306,18 +311,7 @@
       "main": [
         [
           {
-            "node": "Call Claude",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call Claude": {
-      "main": [
-        [
-          {
-            "node": "Build Script",
+            "node": "Call Gemini",
             "type": "main",
             "index": 0
           }
@@ -442,6 +436,17 @@
         [
           {
             "node": "Respond Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini": {
+      "main": [
+        [
+          {
+            "node": "Build Script",
             "type": "main",
             "index": 0
           }

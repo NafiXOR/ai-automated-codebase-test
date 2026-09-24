@@ -217,7 +217,7 @@
       <li><a href="#prereqs" data-step="prereqs">Prerequisites</a></li>
       <li><a href="#step-1" data-step="step-1">1. Configure env vars</a></li>
       <li><a href="#step-2" data-step="step-2">2. Start n8n</a></li>
-      <li><a href="#step-3" data-step="step-3">3. Log in</a></li>
+      <li><a href="#step-3" data-step="step-3">3. Create owner account</a></li>
       <li><a href="#step-4" data-step="step-4">4. Import workflow</a></li>
       <li><a href="#step-5" data-step="step-5">5. Test it</a></li>
       <li><a href="#step-6" data-step="step-6">6. Build your own</a></li>
@@ -262,13 +262,8 @@ docker compose version</code></pre>
         <pre><code>cp .env.example .env</code></pre>
         <button class="copy-btn" data-copy="cp .env.example .env">Copy</button>
       </div>
-      <p>Open <code class="inline">.env</code> and set a real login for the n8n UI:</p>
-      <div class="code-wrap">
-        <pre><code>N8N_BASIC_AUTH_USER=admin
-N8N_BASIC_AUTH_PASSWORD=choose-a-strong-password</code></pre>
-        <button class="copy-btn" data-copy="N8N_BASIC_AUTH_USER=admin&#10;N8N_BASIC_AUTH_PASSWORD=choose-a-strong-password">Copy</button>
-      </div>
-      <div class="note"><code class="inline">.env</code> is git-ignored — your credentials are never committed.</div>
+      <p>The defaults (host <code class="inline">localhost</code>, timezone <code class="inline">UTC</code>) work as-is; edit <code class="inline">.env</code> only to change them.</p>
+      <div class="note"><code class="inline">.env</code> has no login settings. n8n 1.0 and later ignore the old <code class="inline">N8N_BASIC_AUTH_*</code> variables; you create an owner account in the browser instead (step 3).</div>
     </section>
 
     <section class="step" id="step-2">
@@ -289,12 +284,13 @@ docker compose logs -f n8n</code></pre>
     </section>
 
     <section class="step" id="step-3">
-      <h2><span class="step-num">3</span> Log in to the n8n editor
+      <h2><span class="step-num">3</span> Create the owner account
         <label class="check"><input type="checkbox" data-step="step-3"> done</label>
       </h2>
-      <p>Open <a href="http://localhost:5678" target="_blank" rel="noopener">http://localhost:5678</a>
-      and log in with the <code class="inline">N8N_BASIC_AUTH_USER</code> /
-      <code class="inline">N8N_BASIC_AUTH_PASSWORD</code> you set in <code class="inline">.env</code>.</p>
+      <p>Open <a href="http://localhost:5678" target="_blank" rel="noopener">http://localhost:5678</a>.
+      On the first visit n8n asks you to create an <strong>owner account</strong> (email + password); later visits use that login.
+      It is stored in the <code class="inline">n8n_data</code> volume, so it survives restarts.</p>
+      <div class="note">n8n is bound to <code class="inline">127.0.0.1</code>, so it is only reachable from this machine. The app generator webhooks run AI-written code and have no token by default; <code class="inline">docs/app-generator-workflow.md</code> explains how to add one.</div>
     </section>
 
     <section class="step" id="step-4">
@@ -363,7 +359,8 @@ docker compose logs -f n8n</code></pre>
     <section class="step" id="troubleshooting">
       <h2><span class="step-num">•</span> Troubleshooting</h2>
       <div class="note warn"><strong>Port 5678 already in use</strong> — stop whatever else is using it, or change the left-hand port in <code class="inline">ports:</code> in <code class="inline">docker-compose.yml</code> (e.g. <code class="inline">"5679:5678"</code>) and update <code class="inline">WEBHOOK_URL</code>.</div>
-      <div class="note warn"><strong>Can't log in</strong> — confirm <code class="inline">.env</code> exists and was edited before <code class="inline">docker compose up -d</code>. Run <code class="inline">docker compose up -d --force-recreate</code> after changing <code class="inline">.env</code>.</div>
+      <div class="note warn"><strong>Can't log in / forgot the owner password</strong> — the account lives in the <code class="inline">n8n_data</code> volume, not <code class="inline">.env</code>. Reset it with <code class="inline">docker compose exec n8n n8n user-management:reset</code>, then reload the page to create a new owner.</div>
+      <div class="note warn"><strong>Can't reach n8n from another machine</strong> — by design; the port is bound to <code class="inline">127.0.0.1</code>. Change it to <code class="inline">"5678:5678"</code> in <code class="inline">docker-compose.yml</code> only if you need remote access, and put n8n behind TLS if you do.</div>
       <div class="note warn"><strong>Webhook returns 404</strong> — make sure the workflow is toggled <strong>Active</strong>, and use the production URL (<code class="inline">/webhook/...</code>), not the test URL (<code class="inline">/webhook-test/...</code>) shown while editing.</div>
       <div class="note warn"><strong>Losing data after restart</strong> — <code class="inline">docker compose down -v</code> deletes the <code class="inline">n8n_data</code> volume; plain <code class="inline">docker compose down</code> does not.</div>
     </section>

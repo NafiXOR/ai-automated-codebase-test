@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetType = body.target === 'frontend'\n  ? 'frontend (React, single-page app, no build step required to inspect the code)'\n  : 'backend (Node.js + Express REST API)';\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n- Include every file needed to run the project (source code, package.json, a README with run instructions).\n- For a backend project, package.json MUST include a \"start\" script that boots the server, and the server MUST listen on process.env.PORT (falling back to 3000 if unset) \u2014 this is required for automated deployment.\n- Keep the project minimal but functional \u2014 favor completeness over cleverness.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir\n  }\n}];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nif (!body.prompt) {\n  throw new Error('Request body must include a \"prompt\" field describing the app to generate.');\n}\n\nconst targetTypes = {\n  static: 'static website (plain HTML, CSS, and vanilla JavaScript only - no frameworks, no npm, no build step)',\n  frontend: 'frontend (React, single-page app, no build step required to inspect the code)',\n  backend: 'backend (Node.js + Express REST API)'\n};\nconst target = targetTypes[body.target] ? body.target : 'backend';\nconst targetType = targetTypes[target];\n\nconst projectRules = target === 'static'\n  ? `- The site MUST work by opening index.html directly in a browser (file://): no server, no package.json, no CDN or external requests; reference CSS/JS/images with relative paths.\n- Put the entry page at index.html; split styles into .css files and scripts into .js files.\n- Use only images you can express inline (SVG or CSS); do not reference image files you don't include.`\n  : `- Include every file needed to run the project (source code, package.json, a README with run instructions).\n- For a backend project, package.json MUST include a \"start\" script that boots the server, and the server MUST listen on process.env.PORT (falling back to 3000 if unset) — this is required for automated deployment.`;\n\nconst outputDir = (body.outputDir || 'generated-app').replace(/[^a-zA-Z0-9_-]/g, '-');\n\nconst systemPrompt = `You are a code generator. Given a plain-language description of an app, output a complete, runnable ${targetType} project as STRICT JSON only, matching exactly this schema and nothing else (no markdown fences, no commentary, no text before or after the JSON):\n\n{\"files\":[{\"path\":\"relative/file/path.ext\",\"content\":\"full file contents as a string\"}]}\n\nRules:\n${projectRules}\n- Keep the project minimal but functional — favor completeness over cleverness.\n- Do not include node_modules, .git, or any build output.\n- All \"path\" values must be relative (no leading slash, no \"..\").\n- Respond with the JSON object only.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    userPrompt: body.prompt,\n    outputDir\n  }\n}];"
       },
       "id": "8fb6d88c-00b8-4136-b7ee-dea9cc598bb8",
       "name": "Prepare Prompt",
@@ -34,16 +34,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
-            },
             {
               "name": "content-type",
               "value": "application/json"
@@ -52,21 +48,30 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-5\", max_tokens: 8000, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"gemini-3.6-flash\", max_tokens: 16000, reasoning_effort: \"low\", messages: [{ role: \"system\", content: $json.systemPrompt }, { role: \"user\", content: $json.userPrompt }] }) }}",
         "options": {}
       },
       "id": "55ab20eb-38ec-49de-858e-46928609b646",
-      "name": "Call Claude",
+      "name": "Call Gemini",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         660,
         300
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "geminiApiHeader01",
+          "name": "Gemini API"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst text = (response.content && response.content[0] && response.content[0].text) || '';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  throw new Error('Claude did not return valid JSON. Raw response (truncated): ' + text.slice(0, 500));\n}\n\nif (!parsed.files || !Array.isArray(parsed.files)) {\n  throw new Error('Expected a \"files\" array in the generated JSON but did not find one.');\n}\n\nconst outputDir = $('Prepare Prompt').first().json.outputDir;\n\nreturn parsed.files.map(f => ({\n  json: {\n    path: f.path,\n    content: f.content,\n    outputDir\n  }\n}));"
+        "jsCode": "const response = $input.first().json;\n// OpenAI-style chat completion (Gemini's compatibility endpoint). Anthropic Messages\n// responses are still understood, so switching providers back only touches Call Gemini.\nconst choice = (response.choices || [])[0] || {};\nconst text = choice.message\n  ? String(choice.message.content || '')\n  : (response.content || []).filter(b => b.type === 'text').map(b => b.text).join('');\nconst truncated = choice.finish_reason === 'length' || response.stop_reason === 'max_tokens';\nconst jsonText = text.trim().replace(/^```(?:json)?\\s*/, '').replace(/\\s*```$/, '');\n\nconst safePathRe = /^[A-Za-z0-9_][A-Za-z0-9_.\\-\\/]*$/;\nconst isSafePath = p => typeof p === 'string' && safePathRe.test(p) && p.indexOf('..') === -1;\n\nif (truncated) {\n  throw new Error('The model hit the max_tokens limit before finishing the JSON. Ask for a smaller app, or raise max_tokens in the Call Gemini node.');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonText);\n} catch (e) {\n  throw new Error('The model did not return valid JSON. Raw response (truncated): ' + text.slice(0, 500));\n}\n\nif (!parsed.files || !Array.isArray(parsed.files)) {\n  throw new Error('Expected a \"files\" array in the generated JSON but did not find one.');\n}\n\nconst bad = parsed.files.find(f => !isSafePath(f.path));\nif (bad) {\n  throw new Error('Unsafe or invalid file path from generated output: ' + JSON.stringify(bad.path));\n}\n\nconst outputDir = $('Prepare Prompt').first().json.outputDir;\n\nreturn parsed.files.map(f => ({\n  json: {\n    path: f.path,\n    content: f.content,\n    outputDir\n  }\n}));"
       },
       "id": "f4110892-01c6-47cf-84dc-c4b0b33c33c2",
       "name": "Parse Files",
@@ -154,18 +159,7 @@
       "main": [
         [
           {
-            "node": "Call Claude",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call Claude": {
-      "main": [
-        [
-          {
-            "node": "Parse Files",
+            "node": "Call Gemini",
             "type": "main",
             "index": 0
           }
@@ -210,6 +204,17 @@
         [
           {
             "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse Files",
             "type": "main",
             "index": 0
           }

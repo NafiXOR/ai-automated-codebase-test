@@ -10,7 +10,7 @@ with a real deploy step in place of just reporting "tests passed."
 ## How it works
 
 ```
-Webhook ─► Prepare Prompt ─► Call Claude ─► Build Script ─► Run Script ─► Evaluate Result ─► Tests Passed?
+Webhook ─► Prepare Prompt ─► Call Gemini ─► Build Script ─► Run Script ─► Evaluate Result ─► Tests Passed?
              ▲                                                                                  │      │
              │                                                                                yes│    no
              │                                            Summarize ─► Build Deploy Script ─► Run Deploy ─► Evaluate Deploy ─► Respond Success
@@ -26,14 +26,15 @@ Same generate/test/retry mechanics as the self-testing workflow (see
 [docs/app-generator-self-testing-workflow.md](app-generator-self-testing-workflow.md) for how
 that loop works). What's new is the success path:
 
-- **Build Deploy Script** writes a generic Node Dockerfile into the generated project's
-  directory, then constructs a shell script that removes any previous container with the same
+- **Build Deploy Script** writes a generic Node Dockerfile and a `.dockerignore` (which keeps
+  the test run's `node_modules`, dev dependencies included, out of the image) into the generated
+  project's directory, then constructs a shell script that removes any previous container with the same
   name, builds a fresh image, and runs it with the requested host port mapped to the app's port.
 - **Run Deploy** (Execute Command) actually runs that script.
 - **Evaluate Deploy** checks the exit code and reports `deployed` or `tests_passed_deploy_failed`.
 
 Deployment failure does **not** loop back into the fix cycle — a failed `docker build`/`docker
-run` is an infrastructure problem, not something Claude regenerating the code will fix.
+run` is an infrastructure problem, not something regenerating the code will fix.
 
 ## Why this needed infrastructure changes
 
@@ -75,8 +76,11 @@ no deploy) or the placeholder
    From now on, use this two-file `-f ... -f ...` form instead of plain `docker compose up -d`
    whenever you want the deploy step available (stop/logs/etc. work with the plain form since
    they don't need the override's config).
-2. Create/reuse the **Anthropic API** Header Auth credential (`x-api-key` = your key) and select
-   it on the **Call Claude** node, same as the other generator workflows.
+2. Create/reuse the **Gemini API** Header Auth credential (`Authorization` = `Bearer <key>`) and
+   check it's selected on the **Call Gemini** node, same as the other generator workflows. The webhook has no
+   token by default; since this one ends in `docker run` on your host, consider adding one
+   ([how](app-generator-workflow.md#optional-protect-the-webhook-with-a-token)) once you're past
+   testing.
 3. Import [`workflows/app-generator-test-deploy-workflow.json`](../workflows/app-generator-test-deploy-workflow.json),
    save, toggle **Active**.
 4. Confirm Docker Desktop (or your Docker daemon) is running on the host — the deploy step needs
@@ -135,16 +139,16 @@ Unlike guessing at the shell mechanics, I built a mock generated app (a plain No
 with a `package.json` `start` script) and ran the **exact** shell script `Build Deploy Script`
 constructs, for real: `docker build` on a generated Dockerfile, `docker run -d -p <port>:3000`,
 then `curl`'d the running container and got the expected JSON response back, then tore down the
-container and image. That end-to-end mechanism works.
+container and image. That end-to-end mechanism works. It was re-run after the `.dockerignore`
+and exit-code-marker changes, from a `docker:cli` container talking to the host daemon through
+the mounted socket (the same setup as the deploy override), and the image contained no
+`node_modules` from the test run.
 
 What's still unverified without a live n8n instance (same categories as the self-testing
 workflow — see [its doc](app-generator-self-testing-workflow.md#what-i-verified-vs-whats-unverified)):
-IF node condition schema, Execute Command's output field names, and whether your n8n version has
-Execute Command registered at all (we already hit this once — see the troubleshooting history in
-this repo's docs if it happens again). One more n8n-specific unknown here specifically: I tested
-`docker build`/`docker run` directly on this host, not from *inside* a container talking to the
-host daemon over a mounted socket — that's a well-established Docker pattern ("Docker outside of
-Docker"), but I couldn't exercise it end-to-end in this environment.
+IF node condition schema, and Execute Command's output field names. n8n 2.x disables Execute
+Command by default; `docker-compose.yml` re-enables it with `NODES_EXCLUDE`, so if the node
+shows as unknown, check that variable reached the container (`docker compose exec n8n env`).
 
 ## Known limitations
 

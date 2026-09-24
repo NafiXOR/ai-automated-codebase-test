@@ -4,16 +4,22 @@ services:
     container_name: n8n
     restart: unless-stopped
     ports:
-      - "5678:5678"
+      # Bound to localhost only: the generator webhooks run AI-written code (and, with the
+      # deploy override, Docker commands). Drop the 127.0.0.1: prefix only if you need n8n
+      # reachable from other machines, and put it behind real auth/TLS if you do.
+      - "127.0.0.1:5678:5678"
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_HOST=${N8N_HOST:-localhost}
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+      # n8n 2.x disables the Execute Command node by default; the self-testing and deploy
+      # workflows need it. Local File Trigger stays disabled.
+      - NODES_EXCLUDE=["n8n-nodes-base.localFileTrigger"]
+      # Lets the one-shot generator's Read/Write Files node write to the generated/ mount
+      # (n8n 2.x otherwise only allows ~/.n8n-files).
+      - N8N_RESTRICT_FILE_ACCESS_TO=/home/node/generated
     volumes:
       - n8n_data:/home/node/.n8n
       - ./workflows:/home/node/workflows
